@@ -1,5 +1,3 @@
-import { execFile } from "child_process";
-import path from "path";
 import {
   StructuredCareerProfile,
   StructuredCareerProfileSchema,
@@ -14,120 +12,164 @@ import { analyzeJobDescription } from "./jdAnalysisService";
 import { matchCandidateEvidence } from "./evidenceMatchingService";
 import { generateTailoredResume } from "./tailoringService";
 
-const HERMES_CLI_PATH =
-  process.env.HERMES_CLI_PATH ||
-  "C:\\Users\\Dell\\AppData\\Local\\hermes\\bin\\hermes.exe";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-const HERMES_SERVER_URL = process.env.HERMES_SERVER_URL || "";
-const HERMES_API_KEY = process.env.HERMES_API_KEY || "";
+const PRIMARY_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const FALLBACK_MODELS = [
+  PRIMARY_MODEL,
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.8-27b",
+  "groq/compound",
+];
 
 /**
- * Executes Hermes Agent either via:
- * 1. Remote HTTP Endpoint on Oracle VPS (`HERMES_SERVER_URL`)
- * 2. Local CLI Binary on host (`HERMES_CLI_PATH`)
- * 3. Graceful fallback if Hermes is momentarily unreachable
+ * Robust LLM Execution engine powered by Groq API.
+ * Handles automatic fallback across high-speed models, JSON extraction, and timeouts.
  */
-export async function executeHermesOneShot(prompt: string, timeoutMs: number = 25000): Promise<any | null> {
-  // Option 1: Remote Hermes daemon on Oracle VPS
-  if (HERMES_SERVER_URL && HERMES_SERVER_URL.startsWith("http")) {
+export async function executeGroqLLM(
+  prompt: string,
+  systemPrompt: string = "You are an expert AI resume and career intelligence assistant for Orosu. Always return strictly valid JSON.",
+  timeoutMs: number = 25000
+): Promise<any | null> {
+  const modelsToTry = Array.from(new Set(FALLBACK_MODELS));
+
+  for (const model of modelsToTry) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      const res = await fetch(`${HERMES_SERVER_URL}/api/hermes/exec`, {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
           "Content-Type": "application/json",
-          ...(HERMES_API_KEY ? { "x-api-key": HERMES_API_KEY } : {}),
         },
-        body: JSON.stringify({ prompt, timeoutMs }),
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+        }),
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      clearTimeout(timer);
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.data) {
-          return json.data;
-        }
-        return json;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`⚠️ Groq model ${model} responded with status ${response.status}: ${errorText}`);
+        continue;
       }
-    } catch (httpErr: any) {
-      console.warn("⚠️ Remote Hermes VPS service warning:", httpErr.message);
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content || typeof content !== "string") {
+        continue;
+      }
+
+      // Parse JSON from content (supporting raw JSON or fenced markdown)
+      const parsed = cleanAndParseJSON(content);
+      if (parsed) {
+        return parsed;
+      }
+    } catch (err: any) {
+      console.warn(`⚠️ Groq execution warning for model ${model}:`, err.message);
     }
   }
 
-  // Option 2: Local CLI binary
-  return new Promise((resolve) => {
-    try {
-      const child = execFile(
-        HERMES_CLI_PATH,
-        ["-z", prompt],
-        {
-          timeout: timeoutMs,
-          maxBuffer: 10 * 1024 * 1024,
-          windowsHide: true,
-        },
-        (error: Error | null, stdout: string, stderr: string) => {
-          if (error) {
-            console.warn("⚠️ Hermes CLI execution notice:", error.message);
-            return resolve(null);
-          }
-
-          if (!stdout || stdout.trim().length === 0) {
-            return resolve(null);
-          }
-
-          try {
-            const trimmed = stdout.trim();
-            const firstBrace = trimmed.indexOf("{");
-            const lastBrace = trimmed.lastIndexOf("}");
-            if (firstBrace !== -1 && lastBrace !== -1) {
-              const jsonStr = trimmed.slice(firstBrace, lastBrace + 1);
-              const parsed = JSON.parse(jsonStr);
-              return resolve(parsed);
-            }
-          } catch (jsonErr) {
-            console.warn("⚠️ Hermes JSON parsing notice, falling back:", jsonErr);
-          }
-
-          return resolve(null);
-        }
-      );
-    } catch (spawnErr) {
-      console.warn("⚠️ Hermes spawn notice:", spawnErr);
-      resolve(null);
-    }
-  });
+  return null;
 }
 
 /**
- * Hermes Operation 1: runHermesResumeExtraction
- * Parses uploaded resume text, extracting exact links, sections, and structured profile.
+ * Backward-compatible one-shot executor alias
+ */
+export async function executeHermesOneShot(prompt: string, timeoutMs: number = 25000): Promise<any | null> {
+  return executeGroqLLM(prompt, "You are an expert career intelligence engine for Orosu. Return ONLY valid JSON.", timeoutMs);
+}
+
+/**
+ * Extracts candidate information from raw resume text into StructuredCareerProfile using Groq LLM.
+ * Preserves exact hyperlinks, dates, tech stacks, bullet points, and section hierarchy.
  */
 export async function runHermesResumeExtraction(
   rawText: string,
   baselineProfile: StructuredCareerProfile
 ): Promise<StructuredCareerProfile> {
-  const prompt = `You are Hermes Agent for Orosu. Extract all candidate information from this resume text into valid JSON matching StructuredCareerProfile schema.
-Preserve all URLs/hyperlinks (GitHub, LinkedIn, Portfolio, Project URLs), exact dates, metrics, tech tags, and categories.
+  const prompt = `You are the lead resume intelligence engine for Orosu. Extract all candidate information from the following resume text into valid JSON matching StructuredCareerProfile schema.
+CRITICAL REQUIREMENTS:
+1. Preserve all URLs and hyperlinks (GitHub, LinkedIn, Portfolio, Live Demo URLs).
+2. Extract exact employment dates, locations, job titles, and company names.
+3. Extract categorized skills (e.g. Core Web Stack, Databases, Architecture, Tools & Practices, Cloud).
+4. Preserve and format all bullet points and accomplishments.
+5. Extract education history (Institution, Degree, Field, Dates, CGPA/Grade).
+6. Extract certifications with issuer and dates.
 
 Resume Text:
 ${rawText}
 
-Return ONLY a valid JSON object matching:
+Return ONLY a valid JSON object strictly matching this structure:
 {
-  "basics": { "name": "", "email": "", "phone": "", "location": "", "headline": "", "linkedin": "", "portfolio": "" },
+  "basics": {
+    "name": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "headline": "",
+    "linkedin": "",
+    "portfolio": ""
+  },
   "summary": "",
-  "skills": [{ "name": "", "category": "Core Web Stack|Databases|Bonus: AI/ML & Mobile|Architecture|Tools & Practices|Cloud", "proficiency": "Proficient" }],
-  "experiences": [{ "company": "", "role": "", "location": "", "startDate": "", "endDate": "", "isCurrent": false, "bullets": [""], "achievements": [""] }],
-  "projects": [{ "name": "", "description": "", "technologies": [""], "url": "", "bullets": [""], "achievements": [""] }],
-  "education": [{ "institution": "", "degree": "", "field": "", "startDate": "", "endDate": "", "description": "" }],
-  "certifications": [{ "name": "", "issuer": "", "date": "", "description": "" }]
+  "skills": [
+    { "name": "", "category": "Core Web Stack", "proficiency": "Proficient" }
+  ],
+  "experiences": [
+    {
+      "company": "",
+      "role": "",
+      "location": "",
+      "startDate": "",
+      "endDate": "",
+      "isCurrent": false,
+      "bullets": [""],
+      "technologies": [""]
+    }
+  ],
+  "projects": [
+    {
+      "name": "",
+      "description": "",
+      "technologies": [""],
+      "url": "",
+      "previewUrl": "",
+      "bullets": [""]
+    }
+  ],
+  "education": [
+    {
+      "institution": "",
+      "degree": "",
+      "field": "",
+      "startDate": "",
+      "endDate": "",
+      "cgpa": "",
+      "description": ""
+    }
+  ],
+  "certifications": [
+    {
+      "name": "",
+      "issuer": "",
+      "date": "",
+      "description": ""
+    }
+  ]
 }`;
 
-  const result = await executeHermesOneShot(prompt, 30000);
+  const result = await executeGroqLLM(prompt, "You are an expert resume parsing AI. Extract complete candidate profile into valid JSON.", 35000);
+
   if (result) {
     const merged = {
       ...baselineProfile,
@@ -141,6 +183,8 @@ Return ONLY a valid JSON object matching:
       skills: (result.skills && result.skills.length > 0) ? result.skills : baselineProfile.skills,
       experiences: (result.experiences && result.experiences.length > 0) ? result.experiences : baselineProfile.experiences,
       projects: (result.projects && result.projects.length > 0) ? result.projects : baselineProfile.projects,
+      education: (result.education && result.education.length > 0) ? result.education : baselineProfile.education,
+      certifications: (result.certifications && result.certifications.length > 0) ? result.certifications : baselineProfile.certifications,
     };
 
     const validated = StructuredCareerProfileSchema.safeParse(merged);
@@ -153,8 +197,7 @@ Return ONLY a valid JSON object matching:
 }
 
 /**
- * Hermes Operation 2: runHermesJDAnalysis
- * Analyzes target Job Description into structured requirements and evidence expectations.
+ * Analyzes target Job Description into structured requirements and skills using Groq LLM.
  */
 export async function runHermesJDAnalysis(
   rawText: string,
@@ -163,15 +206,16 @@ export async function runHermesJDAnalysis(
 ): Promise<JDAnalysis> {
   const baselineAnalysis = analyzeJobDescription(rawText, company, role);
 
-  const prompt = `You are Hermes Agent for Orosu. Analyze this Job Description into structured JSON.
+  const prompt = `Analyze this Job Description into structured JSON. Extract required skills, preferred skills, technologies, core responsibilities, and keywords.
 Do NOT hallucinate requirements.
 
 Job Description:
 ${rawText}
-Company hint: ${company || "Target Company"}
-Role hint: ${role || "Target Role"}
 
-Return ONLY a JSON object adhering to JDAnalysis schema:
+Company context: ${company || "Target Company"}
+Role context: ${role || "Target Role"}
+
+Return ONLY a JSON object adhering to:
 {
   "jobTitle": "",
   "company": "",
@@ -184,7 +228,8 @@ Return ONLY a JSON object adhering to JDAnalysis schema:
   "domainTerms": [""]
 }`;
 
-  const result = await executeHermesOneShot(prompt, 20000);
+  const result = await executeGroqLLM(prompt, "You are an expert ATS and Job Description analyst. Return valid JSON only.", 20000);
+
   if (result) {
     const merged = {
       ...baselineAnalysis,
@@ -204,8 +249,7 @@ Return ONLY a JSON object adhering to JDAnalysis schema:
 }
 
 /**
- * Hermes Operation 3: runHermesCandidateMatching
- * Strictly evaluates candidate profile against JD requirements with provenance.
+ * Evaluates candidate profile against JD requirements with provenance.
  */
 export async function runHermesCandidateMatching(
   profile: StructuredCareerProfile,
@@ -215,7 +259,6 @@ export async function runHermesCandidateMatching(
 }
 
 /**
- * Hermes Operation 4: runHermesResumeTailoring
  * Generates an evidence-grounded tailored resume JSON prioritizing relevant candidate evidence.
  */
 export async function runHermesResumeTailoring(
@@ -229,7 +272,6 @@ export async function runHermesResumeTailoring(
 }
 
 /**
- * Hermes Operation 5: runHermesResumeValidation
  * Rigorously checks that 100% of statements have source evidence.
  */
 export async function runHermesResumeValidation(
@@ -275,4 +317,26 @@ export async function runHermesResumeValidation(
     rejectedCount: totalStatements - verified,
     evidenceCoveragePercent: coverage,
   };
+}
+
+/**
+ * Utility to extract clean JSON object from raw LLM text
+ */
+function cleanAndParseJSON(raw: string): any | null {
+  try {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      return JSON.parse(trimmed);
+    }
+
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const jsonCandidate = trimmed.slice(firstBrace, lastBrace + 1);
+      return JSON.parse(jsonCandidate);
+    }
+  } catch (err) {
+    // Return null on malformed JSON
+  }
+  return null;
 }

@@ -58,3 +58,8 @@ temp/
 tmp/
 *.scratch
 scratch/
+.cache/
+server/.cache/
+test-*.ts
+server/test-*.ts
+

@@ -34,7 +34,10 @@ services:
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      - key: HERMES_SERVER_URL
+      - key: GROQ_API_KEY
         sync: false
-      - key: HERMES_API_KEY
-        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/src/server/.cache/puppeteer
+

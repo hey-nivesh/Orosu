@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && (npx puppeteer browsers install chrome || true)",
+    "postinstall": "puppeteer browsers install chrome || true",
+    "build": "tsc && (puppeteer browsers install chrome || true)",
     "start": "node dist/index.js"
   },
   "dependencies": {

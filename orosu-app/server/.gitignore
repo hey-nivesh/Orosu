@@ -58,3 +58,6 @@ temp/
 tmp/
 *.scratch
 scratch/
+.cache/
+test-*.ts
+
