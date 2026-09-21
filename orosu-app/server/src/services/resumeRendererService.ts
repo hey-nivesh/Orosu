@@ -505,13 +505,17 @@ function formatBulletWithBoldPrefix(bullet: string): string {
  * Renders an HTML string into a high-quality PDF Buffer using Puppeteer headless Chromium.
  */
 export async function renderResumePDF(html: string): Promise<Buffer> {
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+
   const browser = await puppeteer.launch({
     headless: true,
+    executablePath,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-extensions",
       "--font-render-hinting=none",
     ],
   });
