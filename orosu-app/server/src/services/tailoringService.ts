@@ -50,15 +50,42 @@ export function generateTailoredResume(
   let totalVerified = 0;
   let totalRejected = 0;
 
-  const tailoredExperiences: TailoredExperience[] = profile.experiences.map((exp) => {
+  // Filter valid experiences (excluding phantom workplace tags and placeholders)
+  const validProfileExperiences = (profile.experiences || []).filter(
+    (exp) =>
+      exp.company &&
+      exp.company.trim() &&
+      exp.company !== "Company" &&
+      exp.role &&
+      exp.role.trim() &&
+      !/^(remote|hybrid|onsite)$/i.test(exp.role.trim())
+  );
+
+  const tailoredExperiences: TailoredExperience[] = validProfileExperiences.map((exp) => {
     const rawBullets = exp.achievements || exp.bullets || [];
     const tailoredBullets: TailoredBullet[] = [];
 
+    // Stitch & sanitize bullets
+    const cleanedBulletTexts: string[] = [];
     for (const rawB of rawBullets) {
-      const text = typeof rawB === "string" ? rawB : rawB.text;
-      const sourceId = typeof rawB === "object" ? rawB.sourceBlockId || exp.id || "exp" : exp.id || "exp";
+      const rawText = typeof rawB === "string" ? rawB : rawB.text || "";
+      const clean = rawText.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+      if (!clean || clean === "•") continue;
 
-      if (!text || text.trim().length === 0) continue;
+      if (
+        cleanedBulletTexts.length > 0 &&
+        (/^[a-z,;\)]/.test(clean) ||
+          /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+          /[,\-—–]\s*$/.test(cleanedBulletTexts[cleanedBulletTexts.length - 1]))
+      ) {
+        cleanedBulletTexts[cleanedBulletTexts.length - 1] = `${cleanedBulletTexts[cleanedBulletTexts.length - 1]} ${clean}`.replace(/\s+/g, " ");
+      } else {
+        cleanedBulletTexts.push(clean);
+      }
+    }
+
+    for (const text of cleanedBulletTexts) {
+      const sourceId = exp.id || "exp";
 
       // Extract matching keywords present in this bullet
       const matchingTerms = analysis.keywords.filter((k) =>
@@ -72,7 +99,6 @@ export function generateTailoredResume(
         relevanceScore: matchingTerms.length > 0 ? 0.95 : 0.8,
       };
 
-      // Factual preservation: maintain core statement with highlighted relevance
       tailoredBullets.push({
         text,
         evidence: [evidenceItem],
@@ -99,11 +125,32 @@ export function generateTailoredResume(
   tailoredExperiences.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
 
   // 3. Tailor Projects
-  const tailoredProjects: TailoredProject[] = profile.projects.map((proj) => {
+  const validProfileProjects = (profile.projects || []).filter(
+    (p) => p.name && p.name.trim() && p.name !== "Project"
+  );
+
+  const tailoredProjects: TailoredProject[] = validProfileProjects.map((proj) => {
     const rawBullets = proj.achievements || proj.bullets || [];
-    const tailoredBullets: TailoredBullet[] = rawBullets.map((rawB) => {
-      const text = typeof rawB === "string" ? rawB : rawB.text;
-      const sourceId = typeof rawB === "object" ? rawB.sourceBlockId || proj.id || "proj" : proj.id || "proj";
+    const cleanedBulletTexts: string[] = [];
+    for (const rawB of rawBullets) {
+      const rawText = typeof rawB === "string" ? rawB : rawB.text || "";
+      const clean = rawText.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+      if (!clean || clean === "•") continue;
+
+      if (
+        cleanedBulletTexts.length > 0 &&
+        (/^[a-z,;\)]/.test(clean) ||
+          /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+          /[,\-—–]\s*$/.test(cleanedBulletTexts[cleanedBulletTexts.length - 1]))
+      ) {
+        cleanedBulletTexts[cleanedBulletTexts.length - 1] = `${cleanedBulletTexts[cleanedBulletTexts.length - 1]} ${clean}`.replace(/\s+/g, " ");
+      } else {
+        cleanedBulletTexts.push(clean);
+      }
+    }
+
+    const tailoredBullets: TailoredBullet[] = cleanedBulletTexts.map((text) => {
+      const sourceId = proj.id || "proj";
       const matchingTerms = analysis.keywords.filter((k) =>
         text.toLowerCase().includes(k.toLowerCase())
       );

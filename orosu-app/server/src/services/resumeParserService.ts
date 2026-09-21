@@ -461,18 +461,42 @@ export function parseStructuredCareerFromText(
   return rawProfile;
 }
 
+function cleanAndStitchBullets(rawBullets: string[]): string[] {
+  const result: string[] = [];
+  for (const b of rawBullets) {
+    if (!b) continue;
+    const clean = b.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+    if (clean.length === 0 || clean === "•") continue;
+
+    // Check if this line is a continuation/wrapped line from the previous bullet
+    if (
+      result.length > 0 &&
+      (/^[a-z,;\)]/.test(clean) ||
+        /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+        /[,\-—–]\s*$/.test(result[result.length - 1]))
+    ) {
+      result[result.length - 1] = `${result[result.length - 1]} ${clean}`.replace(/\s+/g, " ");
+    } else {
+      result.push(clean);
+    }
+  }
+  return result;
+}
+
 function parseExperienceFromIR(sections: SectionIR[]) {
   const experiences: any[] = [];
   let currentExp: any = null;
   const datePattern = /(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*)?\d{4}\s*(?:-|–|—|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*)?(?:\d{4}|Present|Current)/i;
+  const isModeLine = /^(Remote|Hybrid|On-?site|Full-?time|Part-?time)\b/i;
 
   const blocks = sections.flatMap((s) => s.blocks);
 
   for (const block of blocks) {
-    const text = block.text;
+    const text = block.text.trim();
+    if (!text || text === "•") continue;
+
     const hasDate = datePattern.test(text);
-    const hasSeparator = text.includes("|") || text.includes(" - ") || text.includes(" – ") || text.includes(" — ");
-    const isBullet = block.type === "bullet";
+    const isBullet = block.type === "bullet" || /^[•\-*·▪▫►]/.test(text);
 
     // Detect tech footer line
     if (/^Tech:\s*/i.test(text) && currentExp) {
@@ -481,21 +505,61 @@ function parseExperienceFromIR(sections: SectionIR[]) {
       continue;
     }
 
-    if ((hasDate || hasSeparator) && !isBullet && text.length < 120) {
-      if (currentExp && currentExp.role && currentExp.company) {
+    // Check if this is a metadata/date line for the existing experience (e.g. "Remote | Dec 2025 – May 2026")
+    if (currentExp && (isModeLine.test(text) || (hasDate && !text.includes("|") && text.length < 50))) {
+      const dateMatch = text.match(datePattern);
+      if (dateMatch) {
+        const dates = dateMatch[0].split(/(?:-|–|—|to)/i).map((d) => d.trim());
+        currentExp.startDate = dates[0] || currentExp.startDate;
+        currentExp.endDate = dates[1] || currentExp.endDate;
+        currentExp.isCurrent = /Present|Current/i.test(dates[1] || "");
+      }
+      if (isModeLine.test(text)) {
+        const modeMatch = text.match(isModeLine);
+        if (modeMatch) currentExp.location = modeMatch[0];
+      }
+      continue;
+    }
+
+    const hasSeparator = text.includes(" | ") || text.includes(" - ") || text.includes(" – ") || text.includes(" — ") || text.includes(" at ");
+
+    if ((hasDate || hasSeparator) && !isBullet && text.length < 120 && !isModeLine.test(text)) {
+      if (currentExp && currentExp.role && currentExp.company && currentExp.company !== "Company" && !isModeLine.test(currentExp.role)) {
+        currentExp.bullets = cleanAndStitchBullets(currentExp.bullets);
         experiences.push(currentExp);
       }
 
       const dateMatch = text.match(datePattern);
       const dates = dateMatch ? dateMatch[0].split(/(?:-|–|—|to)/i).map((d) => d.trim()) : ["", "Present"];
       const cleanLine = dateMatch ? text.replace(dateMatch[0], "").trim() : text;
-      const parts = cleanLine.split(/[|•–—\-,]/).map((p) => p.trim()).filter(Boolean);
+
+      // Smart splitting on role and company using explicit whitespace boundaries
+      let role = "Software Engineer";
+      let company = "Company";
+      let location = "";
+
+      if (cleanLine.includes(" | ")) {
+        const parts = cleanLine.split(" | ").map((p) => p.trim()).filter(Boolean);
+        role = parts[0] || role;
+        company = parts[1] || company;
+        location = parts[2] || "";
+      } else if (cleanLine.includes(" at ")) {
+        const parts = cleanLine.split(" at ").map((p) => p.trim()).filter(Boolean);
+        role = parts[0] || role;
+        company = parts[1] || company;
+      } else if (cleanLine.includes(" – ") || cleanLine.includes(" — ") || cleanLine.includes(" - ")) {
+        const parts = cleanLine.split(/\s+[–—-]\s+/).map((p) => p.trim()).filter(Boolean);
+        role = parts[0] || role;
+        company = parts[1] || company;
+      } else {
+        role = cleanLine;
+      }
 
       currentExp = {
         id: uuidv4(),
-        role: parts[0] || "Software Engineer",
-        company: parts[1] || "Company",
-        location: parts[2] || "",
+        role,
+        company,
+        location,
         startDate: dates[0] || "",
         endDate: dates[1] || "Present",
         isCurrent: /Present|Current/i.test(dates[1] || ""),
@@ -507,19 +571,21 @@ function parseExperienceFromIR(sections: SectionIR[]) {
         source: "resume",
       };
     } else if (currentExp) {
-      if (text.length > 0) {
+      const clean = text.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+      if (clean.length > 0 && clean !== "•") {
         currentExp.achievements.push({
-          text,
+          text: clean,
           sourceBlockId: block.id,
           sourceText: text,
         });
-        currentExp.bullets.push(text);
+        currentExp.bullets.push(clean);
         currentExp.sourceBlockIds.push(block.id);
       }
     }
   }
 
-  if (currentExp && currentExp.role && currentExp.company) {
+  if (currentExp && currentExp.role && currentExp.company && currentExp.company !== "Company" && !isModeLine.test(currentExp.role)) {
+    currentExp.bullets = cleanAndStitchBullets(currentExp.bullets);
     experiences.push(currentExp);
   }
 
@@ -533,8 +599,9 @@ function parseProjectsFromIR(sections: SectionIR[], extractedLinks: ExtractedLin
   const blocks = sections.flatMap((s) => s.blocks);
 
   for (const block of blocks) {
-    const text = block.text;
-    const isBullet = block.type === "bullet";
+    const text = block.text.trim();
+    if (!text || text === "•") continue;
+    const isBullet = block.type === "bullet" || /^[•\-*·▪▫►]/.test(text);
 
     // Detect tech line
     if (/^Tech:\s*/i.test(text) && currentProj) {
@@ -546,11 +613,12 @@ function parseProjectsFromIR(sections: SectionIR[], extractedLinks: ExtractedLin
     const isHeader = !isBullet && text.length < 90 && !/^Tech:/i.test(text);
 
     if (isHeader) {
-      if (currentProj && currentProj.name) {
+      if (currentProj && currentProj.name && currentProj.name !== "Project") {
+        currentProj.bullets = cleanAndStitchBullets(currentProj.bullets);
         projects.push(currentProj);
       }
 
-      const parts = text.split(/[|:–—\-]/).map((p) => p.trim()).filter(Boolean);
+      const parts = text.split(/\s+[|:–—-]\s+/).map((p) => p.trim()).filter(Boolean);
       const projName = parts[0] || "Project";
       
       // Match links associated with this project
@@ -559,7 +627,7 @@ function parseProjectsFromIR(sections: SectionIR[], extractedLinks: ExtractedLin
       currentProj = {
         id: uuidv4(),
         name: projName,
-        description: parts.slice(1).join(" - "),
+        description: parts.slice(1).join(" — "),
         technologies: [],
         url: projLink,
         achievements: [],
@@ -568,19 +636,21 @@ function parseProjectsFromIR(sections: SectionIR[], extractedLinks: ExtractedLin
         source: "resume",
       };
     } else if (currentProj) {
-      if (text.length > 0) {
+      const clean = text.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+      if (clean.length > 0 && clean !== "•") {
         currentProj.achievements.push({
-          text,
+          text: clean,
           sourceBlockId: block.id,
           sourceText: text,
         });
-        currentProj.bullets.push(text);
+        currentProj.bullets.push(clean);
         currentProj.sourceBlockIds.push(block.id);
       }
     }
   }
 
-  if (currentProj && currentProj.name) {
+  if (currentProj && currentProj.name && currentProj.name !== "Project") {
+    currentProj.bullets = cleanAndStitchBullets(currentProj.bullets);
     projects.push(currentProj);
   }
 

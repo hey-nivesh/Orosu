@@ -360,121 +360,201 @@ export default function TailoredResumeDetailPage() {
           )}
 
           {/* Work Experience */}
-          {resume.experiences && resume.experiences.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#1e3a8a] border-b-[1.5px] border-[#1e3a8a] pb-0.5">
-                WORK EXPERIENCE
-              </h3>
+          {(() => {
+            const cleanBulletList = (bullets: any[]) => {
+              const list: any[] = [];
+              for (const b of bullets || []) {
+                const rawText = typeof b === "string" ? b : b?.text || "";
+                const clean = rawText.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+                if (!clean || clean === "•") continue;
 
-              {resume.experiences.map((exp, expIdx) => (
-                <div key={expIdx} className="space-y-1 text-xs">
-                  <div className="flex items-baseline justify-between font-bold text-[#0f172a]">
-                    <div>
-                      <span className="font-extrabold">{exp.role}</span>
-                      <span className="text-[#94a3b8] mx-1">|</span>
-                      <span className="font-semibold text-[#475569]">{exp.company}</span>
-                    </div>
-                  </div>
+                if (
+                  list.length > 0 &&
+                  (/^[a-z,;\)]/.test(clean) ||
+                    /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+                    /[,\-—–]\s*$/.test(list[list.length - 1].text))
+                ) {
+                  list[list.length - 1] = {
+                    ...list[list.length - 1],
+                    text: `${list[list.length - 1].text} ${clean}`.replace(/\s+/g, " "),
+                  };
+                } else {
+                  list.push(typeof b === "object" ? { ...b, text: clean } : { text: clean });
+                }
+              }
+              return list;
+            };
 
-                  <div className="text-[11px] italic text-[#64748b] flex items-center gap-1.5">
-                    <span>
-                      {exp.startDate} {exp.endDate ? `– ${exp.endDate}` : ""}
-                    </span>
-                    {exp.location && (
-                      <>
-                        <span className="not-italic text-[#94a3b8]">•</span>
-                        <span>{exp.location}</span>
-                      </>
-                    )}
-                  </div>
+            const validExperiences = (resume.experiences || []).filter(
+              (exp) =>
+                exp.company &&
+                exp.company.trim() &&
+                exp.company !== "Company" &&
+                exp.role &&
+                exp.role.trim() &&
+                !/^(remote|hybrid|onsite)$/i.test(exp.role.trim())
+            );
 
-                  {exp.bullets && exp.bullets.length > 0 && (
-                    <ul className="space-y-1 text-[#1f2937] list-disc list-outside pl-4 pt-0.5">
-                      {exp.bullets.map((b, bIdx) => (
-                        <li
-                          key={bIdx}
-                          onClick={() => setSelectedBullet(b)}
-                          className={`leading-relaxed cursor-pointer p-0.5 rounded transition-colors ${
-                            selectedBullet?.text === b.text
-                              ? "bg-purple-50 ring-1 ring-purple-300 text-purple-950 font-medium"
-                              : "hover:bg-rose-50"
-                          }`}
-                        >
-                          <span>{b.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+            if (validExperiences.length === 0) return null;
 
-                  {(exp as any).technologies && (exp as any).technologies.length > 0 && (
-                    <div className="text-[11px] italic text-[#475569] pl-4">
-                      Tech: {(exp as any).technologies.join(", ")}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+            return (
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#1e3a8a] border-b-[1.5px] border-[#1e3a8a] pb-0.5">
+                  WORK EXPERIENCE
+                </h3>
 
-          {/* Featured Projects */}
-          {resume.projects && resume.projects.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#1e3a8a] border-b-[1.5px] border-[#1e3a8a] pb-0.5">
-                PROJECTS
-              </h3>
+                {validExperiences.map((exp, expIdx) => {
+                  const bullets = cleanBulletList(exp.bullets || (exp as any).achievements || []);
+                  return (
+                    <div key={expIdx} className="space-y-1 text-xs">
+                      <div className="flex items-baseline justify-between font-bold text-[#0f172a]">
+                        <div>
+                          <span className="font-extrabold">{exp.role}</span>
+                          <span className="text-[#94a3b8] mx-1">|</span>
+                          <span className="font-semibold text-[#475569]">{exp.company}</span>
+                        </div>
+                      </div>
 
-              {resume.projects.map((proj, pIdx) => (
-                <div key={pIdx} className="space-y-1 text-xs">
-                  <div className="flex items-baseline justify-between font-bold text-[#0f172a]">
-                    <div>
-                      <span className="font-extrabold">{proj.name}</span>
-                      {proj.description && (
-                        <span className="font-semibold text-[#475569]"> — {proj.description}</span>
+                      <div className="text-[11px] italic text-[#64748b] flex items-center gap-1.5">
+                        <span>
+                          {exp.startDate} {exp.endDate ? `– ${exp.endDate}` : ""}
+                        </span>
+                        {exp.location && (
+                          <>
+                            <span className="not-italic text-[#94a3b8]">•</span>
+                            <span>{exp.location}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {bullets.length > 0 && (
+                        <ul className="space-y-1 text-[#1f2937] list-disc list-outside pl-4 pt-0.5">
+                          {bullets.map((b: any, bIdx: number) => (
+                            <li
+                              key={bIdx}
+                              onClick={() => setSelectedBullet(b)}
+                              className={`leading-relaxed cursor-pointer p-0.5 rounded transition-colors ${
+                                selectedBullet?.text === b.text
+                                  ? "bg-purple-50 ring-1 ring-purple-300 text-purple-950 font-medium"
+                                  : "hover:bg-rose-50"
+                              }`}
+                            >
+                              <span>{b.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {(exp as any).technologies && (exp as any).technologies.length > 0 && (
+                        <div className="text-[11px] italic text-[#475569] pl-4">
+                          Tech: {(exp as any).technologies.join(", ")}
+                        </div>
                       )}
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
-                  <div className="text-[11px] text-[#64748b] flex items-center gap-2">
-                    {(proj as any).startDate && (
-                      <span className="italic">
-                        {(proj as any).startDate} {(proj as any).endDate ? `– ${(proj as any).endDate}` : ""}
-                      </span>
-                    )}
-                    {proj.url && (
-                      <a
-                        href={proj.url.startsWith("http") ? proj.url : `https://${proj.url}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#0369a1] underline font-semibold"
-                      >
-                        {proj.url.includes("github.com") ? "GitHub" : "Preview"}
-                      </a>
-                    )}
-                  </div>
+          {/* Featured Projects */}
+          {(() => {
+            const cleanBulletList = (bullets: any[]) => {
+              const list: any[] = [];
+              for (const b of bullets || []) {
+                const rawText = typeof b === "string" ? b : b?.text || "";
+                const clean = rawText.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+                if (!clean || clean === "•") continue;
 
-                  {proj.bullets && proj.bullets.length > 0 && (
-                    <ul className="space-y-1 text-[#1f2937] list-disc list-outside pl-4 pt-0.5">
-                      {proj.bullets.map((b, bIdx) => (
-                        <li
-                          key={bIdx}
-                          onClick={() => setSelectedBullet(b)}
-                          className="leading-relaxed cursor-pointer hover:bg-rose-50 p-0.5 rounded"
-                        >
-                          <span>{b.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                if (
+                  list.length > 0 &&
+                  (/^[a-z,;\)]/.test(clean) ||
+                    /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+                    /[,\-—–]\s*$/.test(list[list.length - 1].text))
+                ) {
+                  list[list.length - 1] = {
+                    ...list[list.length - 1],
+                    text: `${list[list.length - 1].text} ${clean}`.replace(/\s+/g, " "),
+                  };
+                } else {
+                  list.push(typeof b === "object" ? { ...b, text: clean } : { text: clean });
+                }
+              }
+              return list;
+            };
 
-                  {proj.technologies && proj.technologies.length > 0 && (
-                    <div className="text-[11px] italic text-[#475569] pl-4">
-                      Tech: {proj.technologies.join(", ")}
+            const validProjects = (resume.projects || []).filter(
+              (p) => p.name && p.name.trim() && p.name !== "Project"
+            );
+
+            if (validProjects.length === 0) return null;
+
+            return (
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#1e3a8a] border-b-[1.5px] border-[#1e3a8a] pb-0.5">
+                  PROJECTS
+                </h3>
+
+                {validProjects.map((proj, pIdx) => {
+                  const bullets = cleanBulletList(proj.bullets || (proj as any).achievements || []);
+                  return (
+                    <div key={pIdx} className="space-y-1 text-xs">
+                      <div className="flex items-baseline justify-between font-bold text-[#0f172a]">
+                        <div>
+                          <span className="font-extrabold">{proj.name}</span>
+                          {proj.description && (
+                            <span className="font-semibold text-[#475569]"> — {proj.description}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-[#64748b] flex items-center gap-2">
+                        {(proj as any).startDate && (
+                          <span className="italic">
+                            {(proj as any).startDate} {(proj as any).endDate ? `– ${(proj as any).endDate}` : ""}
+                          </span>
+                        )}
+                        {proj.url && (
+                          <a
+                            href={proj.url.startsWith("http") ? proj.url : `https://${proj.url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#0369a1] underline font-semibold"
+                          >
+                            {proj.url.includes("github.com") ? "GitHub" : "Preview"}
+                          </a>
+                        )}
+                      </div>
+
+                      {bullets.length > 0 && (
+                        <ul className="space-y-1 text-[#1f2937] list-disc list-outside pl-4 pt-0.5">
+                          {bullets.map((b: any, bIdx: number) => (
+                            <li
+                              key={bIdx}
+                              onClick={() => setSelectedBullet(b)}
+                              className={`leading-relaxed cursor-pointer p-0.5 rounded transition-colors ${
+                                selectedBullet?.text === b.text
+                                  ? "bg-purple-50 ring-1 ring-purple-300 text-purple-950 font-medium"
+                                  : "hover:bg-rose-50"
+                              }`}
+                            >
+                              <span>{b.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {proj.technologies && proj.technologies.length > 0 && (
+                        <div className="text-[11px] italic text-[#475569] pl-4">
+                          Tech: {proj.technologies.join(", ")}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Education */}
           {resume.education && resume.education.length > 0 && (

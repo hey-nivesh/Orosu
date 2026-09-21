@@ -64,14 +64,37 @@ export function renderResumeHTML(resume: TailoredResumeJSON): string {
     )
     .join("\n");
 
-  // Helper to sanitize bullet text removing any leading bullet symbols
-  const cleanBulletText = (text: string): string => {
-    return text.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+  // Helper to sanitize and stitch bullet texts
+  const cleanAndStitchBulletList = (bullets: any[]): string[] => {
+    const list: string[] = [];
+    for (const b of bullets || []) {
+      const raw = typeof b === "string" ? b : b?.text || "";
+      const clean = raw.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+      if (!clean || clean === "•") continue;
+
+      if (
+        list.length > 0 &&
+        (/^[a-z,;\)]/.test(clean) ||
+          /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(clean) ||
+          /[,\-—–]\s*$/.test(list[list.length - 1]))
+      ) {
+        list[list.length - 1] = `${list[list.length - 1]} ${clean}`.replace(/\s+/g, " ");
+      } else {
+        list.push(clean);
+      }
+    }
+    return list;
   };
 
   // Experiences rendering
   const validExperiences = (experiences || []).filter(
-    (exp) => exp.company && exp.company.trim() && exp.role && exp.role.trim() && exp.company !== "Company"
+    (exp) =>
+      exp.company &&
+      exp.company.trim() &&
+      exp.company !== "Company" &&
+      exp.role &&
+      exp.role.trim() &&
+      !/^(remote|hybrid|onsite)$/i.test(exp.role.trim())
   );
 
   const experiencesHTML = validExperiences
@@ -82,10 +105,7 @@ export function renderResumeHTML(resume: TailoredResumeJSON): string {
         ? escapeHTML(exp.endDate)
         : "";
 
-      const bullets = (exp.bullets || [])
-        .map((b) => cleanBulletText(b.text))
-        .filter((t) => t.length > 0);
-
+      const bullets = cleanAndStitchBulletList(exp.bullets || (exp as any).achievements || []);
       const techTags: string[] = (exp as any).technologies || [];
 
       return `
@@ -127,9 +147,7 @@ export function renderResumeHTML(resume: TailoredResumeJSON): string {
         ? `${escapeHTML(anyProj.startDate || anyProj.dates)}${anyProj.endDate ? ` – ${escapeHTML(anyProj.endDate)}` : ""}`
         : "";
 
-      const bullets = (proj.bullets || [])
-        .map((b) => cleanBulletText(b.text))
-        .filter((t) => t.length > 0);
+      const bullets = cleanAndStitchBulletList(proj.bullets || anyProj.achievements || []);
 
       const techString = proj.technologies && proj.technologies.length > 0 ? proj.technologies.join(", ") : "";
 

@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import {
   StructuredCareerProfile,
   StructuredCareerProfileSchema,
@@ -12,11 +15,10 @@ import { analyzeJobDescription } from "./jdAnalysisService";
 import { matchCandidateEvidence } from "./evidenceMatchingService";
 import { generateTailoredResume } from "./tailoringService";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-
-const PRIMARY_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-const FALLBACK_MODELS = [
-  PRIMARY_MODEL,
+const getGroqApiKey = () => process.env.GROQ_API_KEY || "";
+const getPrimaryModel = () => process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const getFallbackModels = () => [
+  getPrimaryModel(),
   "openai/gpt-oss-20b",
   "qwen/qwen3.8-27b",
   "groq/compound",
@@ -31,7 +33,13 @@ export async function executeGroqLLM(
   systemPrompt: string = "You are an expert AI resume and career intelligence assistant for Orosu. Always return strictly valid JSON.",
   timeoutMs: number = 25000
 ): Promise<any | null> {
-  const modelsToTry = Array.from(new Set(FALLBACK_MODELS));
+  const apiKey = getGroqApiKey();
+  if (!apiKey) {
+    console.warn("⚠️ No GROQ_API_KEY provided in environment.");
+    return null;
+  }
+
+  const modelsToTry = Array.from(new Set(getFallbackModels()));
 
   for (const model of modelsToTry) {
     try {
@@ -41,7 +49,7 @@ export async function executeGroqLLM(
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -91,6 +99,34 @@ export async function executeHermesOneShot(prompt: string, timeoutMs: number = 2
 }
 
 /**
+ * Cleans, sanitizes, and stitches fragmented bullets
+ */
+function sanitizeBullets(bullets: any[]): string[] {
+  if (!Array.isArray(bullets)) return [];
+  const cleaned: string[] = [];
+
+  for (const b of bullets) {
+    const raw = typeof b === "string" ? b : b?.text || "";
+    const str = raw.replace(/^[•\-*·▪▫►\d.]+\s*/, "").trim();
+    if (str.length === 0 || str === "•") continue;
+
+    // Check if this line is a continuation/wrapped line from the previous bullet
+    if (
+      cleaned.length > 0 &&
+      (/^[a-z,;\)]/.test(str) ||
+        /^(and|or|with|for|in|to|across|using|backed|APIs|build|deployment|features|stack|development|database|pipeline)/i.test(str) ||
+        /[,\-—–]\s*$/.test(cleaned[cleaned.length - 1]))
+    ) {
+      cleaned[cleaned.length - 1] = `${cleaned[cleaned.length - 1]} ${str}`.replace(/\s+/g, " ");
+    } else {
+      cleaned.push(str);
+    }
+  }
+
+  return cleaned;
+}
+
+/**
  * Extracts candidate information from raw resume text into StructuredCareerProfile using Groq LLM.
  * Preserves exact hyperlinks, dates, tech stacks, bullet points, and section hierarchy.
  */
@@ -99,13 +135,14 @@ export async function runHermesResumeExtraction(
   baselineProfile: StructuredCareerProfile
 ): Promise<StructuredCareerProfile> {
   const prompt = `You are the lead resume intelligence engine for Orosu. Extract all candidate information from the following resume text into valid JSON matching StructuredCareerProfile schema.
-CRITICAL REQUIREMENTS:
-1. Preserve all URLs and hyperlinks (GitHub, LinkedIn, Portfolio, Live Demo URLs).
-2. Extract exact employment dates, locations, job titles, and company names.
-3. Extract categorized skills (e.g. Core Web Stack, Databases, Architecture, Tools & Practices, Cloud).
-4. Preserve and format all bullet points and accomplishments.
-5. Extract education history (Institution, Degree, Field, Dates, CGPA/Grade).
-6. Extract certifications with issuer and dates.
+
+CRITICAL INSTRUCTIONS TO PREVENT PARSING DEFECTS:
+1. PRESERVE COMPLETE SENTENCES: If a bullet was wrapped across multiple lines in the document (e.g. "across the full SDLC — design, build," + "and deployment."), combine them into ONE single complete bullet point.
+2. ZERO EMPTY BULLETS: Never output empty bullets, single dots, or whitespace-only bullets.
+3. NO PHANTOM/DUPLICATE EXPERIENCES: Do not create separate experience objects for workplace modes like "Remote" or "Hybrid" or date headers. A role like "Full Stack Developer Intern at HiDevs (Remote) | Dec 2025 – May 2026" is ONE single experience.
+4. PRESERVE HYPHENATED WORDS: Do not split words like "Part-time" or "Full-stack" across role/company fields.
+5. PRESERVE ALL URLs: GitHub, LinkedIn, Portfolio, Live Demo URLs.
+6. EXTRACT SKILLS INTO DISTINCT CATEGORIES: Core Web Stack, Databases, Architecture, Tools & Practices, Cloud.
 
 Resume Text:
 ${rawText}
@@ -171,6 +208,22 @@ Return ONLY a valid JSON object strictly matching this structure:
   const result = await executeGroqLLM(prompt, "You are an expert resume parsing AI. Extract complete candidate profile into valid JSON.", 35000);
 
   if (result) {
+    // Sanitize experiences from Groq
+    const sanitizedExperiences = (result.experiences || baselineProfile.experiences || [])
+      .filter((exp: any) => exp.company && exp.company !== "Company" && exp.role && !/^(remote|hybrid|onsite)$/i.test(exp.role.trim()))
+      .map((exp: any) => ({
+        ...exp,
+        bullets: sanitizeBullets(exp.bullets || exp.achievements || []),
+      }));
+
+    // Sanitize projects from Groq
+    const sanitizedProjects = (result.projects || baselineProfile.projects || [])
+      .filter((proj: any) => proj.name && proj.name !== "Project")
+      .map((proj: any) => ({
+        ...proj,
+        bullets: sanitizeBullets(proj.bullets || proj.achievements || []),
+      }));
+
     const merged = {
       ...baselineProfile,
       ...result,
@@ -181,8 +234,8 @@ Return ONLY a valid JSON object strictly matching this structure:
         portfolio: result.basics?.portfolio || baselineProfile.basics.portfolio,
       },
       skills: (result.skills && result.skills.length > 0) ? result.skills : baselineProfile.skills,
-      experiences: (result.experiences && result.experiences.length > 0) ? result.experiences : baselineProfile.experiences,
-      projects: (result.projects && result.projects.length > 0) ? result.projects : baselineProfile.projects,
+      experiences: sanitizedExperiences.length > 0 ? sanitizedExperiences : baselineProfile.experiences,
+      projects: sanitizedProjects.length > 0 ? sanitizedProjects : baselineProfile.projects,
       education: (result.education && result.education.length > 0) ? result.education : baselineProfile.education,
       certifications: (result.certifications && result.certifications.length > 0) ? result.certifications : baselineProfile.certifications,
     };
