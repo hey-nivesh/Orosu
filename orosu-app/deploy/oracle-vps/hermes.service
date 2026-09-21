@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes Agent Sidecar Server for Orosu
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hermes-server
+ExecStart=/usr/bin/python3 /opt/hermes-server/hermes_server.py
+Restart=always
+RestartSec=5
+Environment=PORT=8000
+Environment=HERMES_CLI_PATH=hermes
+Environment=HERMES_API_KEY=orosu_secret_key_123
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# Secrets & Credentials
+client_secret*.json
+*.secret.json
+*.key
+*.pem
+.env
+.env*
+!*.env.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+dist/
+**/dist/
+build/
+*.tsbuildinfo
+
+# Logs & Temporary
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.vercel

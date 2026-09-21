@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+server/node_modules/
+.pnp
+.pnp.js
+
+# Next.js Build Output & Cache
+.next/
+out/
+build/
+dist/
+server/dist/
+
+# TypeScript Build Cache
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment Variables & Secrets
+.env
+.env*.local
+.env.development
+.env.production
+.env.test
+server/.env
+server/.env*.local
+server/.env.development
+server/.env.production
+server/.env.test
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Vercel & Deployment Artifacts
+.vercel
+.turbo
+
+# OS & Editor Files
+.DS_Store
+*.pem
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary & Test Files
+coverage/
+temp/
+tmp/
+*.scratch
+scratch/

@@ -1,0 +1,67 @@
+{
+  "name": "orosu-resume-intelligence",
+  "version": "1.0.0",
+  "description": "Strict, anti-hallucination resume tailoring, evidence matching, and JD intelligence skill for Orosu",
+  "author": "Orosu Core Architecture",
+  "rules": [
+    "The canonical Career Profile is the single source of truth.",
+    "Never fabricate companies, job titles, dates, technologies, metrics, skills, achievements, responsibilities, certifications, education, projects, or leadership experience.",
+    "Every generated factual statement must retain strict evidence provenance linking to a source block or profile item.",
+    "Rewrite statements only to improve clarity, grammar, and alignment with the target Job Description while preserving truth.",
+    "Intelligently omit empty sections and avoid placeholder values (e.g., 'Present' without date, 'Target Organization', 'Degree in Field of Study').",
+    "Return strict, schema-validated JSON outputs for all 4 discrete operations: analyze_job_description, match_candidate_evidence, tailor_resume, validate_tailored_resume."
+  ],
+  "operations": {
+    "analyze_job_description": {
+      "description": "Analyze raw Job Description into structured requirements, seniority, technologies, responsibilities, and evidence requirements.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rawText": { "type": "string" },
+          "company": { "type": "string" },
+          "role": { "type": "string" }
+        },
+        "required": ["rawText"]
+      },
+      "outputSchema": "JDAnalysisSchema"
+    },
+    "match_candidate_evidence": {
+      "description": "Compare JD requirements against Canonical Career Profile and categorize matches into matched, partially_matched, or not_found with provenance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "object" },
+          "analysis": { "type": "object" }
+        },
+        "required": ["profile", "analysis"]
+      },
+      "outputSchema": "RequirementMatchArray"
+    },
+    "tailor_resume": {
+      "description": "Generate an evidence-grounded tailored resume JSON prioritizing relevant experiences and skills for the target JD.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "object" },
+          "analysis": { "type": "object" },
+          "evidenceMap": { "type": "array" },
+          "templateId": { "type": "string" }
+        },
+        "required": ["profile", "analysis", "evidenceMap"]
+      },
+      "outputSchema": "TailoredResumeJSONSchema"
+    },
+    "validate_tailored_resume": {
+      "description": "Rigorously validate that 100% of factual statements in the tailored resume are backed by source evidence in the profile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tailoredResume": { "type": "object" },
+          "profile": { "type": "object" }
+        },
+        "required": ["tailoredResume", "profile"]
+      },
+      "outputSchema": "ValidationResult"
+    }
+  }
+}
