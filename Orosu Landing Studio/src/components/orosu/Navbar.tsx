@@ -34,8 +34,8 @@ export function Navbar() {
           {nav.map(({ label, href }) => <a key={label} className={active === label ? "active" : ""} href={href}>{label}</a>)}
         </div>
         <div className="nav-actions">
-          <a href="#footer" className="login-link">Log in</a>
-          <Button asChild variant="brand" size="sm"><a href="#final-cta">Get Started</a></Button>
+          <a href="https://orosu-72g3.vercel.app" className="login-link">Log in</a>
+          <Button asChild variant="brand" size="sm"><a href="https://orosu-72g3.vercel.app">Get Started</a></Button>
           <Button variant="ghost" size="icon" className="menu-trigger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
             {open ? <X /> : <Menu />}
           </Button>

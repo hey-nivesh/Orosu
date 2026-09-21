@@ -5,7 +5,7 @@ import { ApplicationTable, HeroCareerEngine, ProfileFlow, ResumeAssembly } from 
 import { ArrowButton, Eyebrow, Reveal, SectionHeading } from "./Shared";
 
 export function Hero() {
-  return <section id="top" className="hero-section"><div className="hero-glow" /><div className="page-shell hero-inner"><Reveal className="hero-copy"><Eyebrow>AI-POWERED JOB APPLICATIONS</Eyebrow><h1>Your job search<br />without the<br /><span>busywork.</span></h1><p>Orosu turns your career profile and any job description into a tailored, application-ready resume in seconds.</p><div className="hero-actions"><ArrowButton href="#product">Build my profile</ArrowButton><Button asChild variant="soft" size="pill"><a href="#how-it-works">See how it works <ArrowDown /></a></Button></div><small className="trust-line"><CircleCheck /> One profile. Tailored for every role.</small></Reveal><Reveal className="hero-visual-wrap"><HeroCareerEngine /></Reveal></div></section>;
+  return <section id="top" className="hero-section"><div className="hero-glow" /><div className="page-shell hero-inner"><Reveal className="hero-copy"><Eyebrow>AI-POWERED JOB APPLICATIONS</Eyebrow><h1>Your job search<br />without the<br /><span>busywork.</span></h1><p>Orosu turns your career profile and any job description into a tailored, application-ready resume in seconds.</p><div className="hero-actions"><ArrowButton href="https://orosu-72g3.vercel.app">Build my profile</ArrowButton><Button asChild variant="soft" size="pill"><a href="#how-it-works">See how it works <ArrowDown /></a></Button></div><small className="trust-line"><CircleCheck /> One profile. Tailored for every role.</small></Reveal><Reveal className="hero-visual-wrap"><HeroCareerEngine /></Reveal></div></section>;
 }
 
 const problems = [
@@ -73,7 +73,7 @@ export function PricingSection() {
 }
 
 export function FinalCta() {
-  return <section id="final-cta" className="final-cta"><img src={logoAsset.url} alt="" className="cta-logo" /><div className="page-shell"><Reveal className="center-heading"><Eyebrow>READY WHEN YOU ARE</Eyebrow><h2>Stop doing the<br />same work twice.<br /><span className="gradient-text">Start with Orosu.</span></h2><p>Build your profile once. Tailor every application from there.</p><ArrowButton>Build my profile</ArrowButton><small>No credit card required.</small></Reveal></div></section>;
+  return <section id="final-cta" className="final-cta"><img src={logoAsset.url} alt="" className="cta-logo" /><div className="page-shell"><Reveal className="center-heading"><Eyebrow>READY WHEN YOU ARE</Eyebrow><h2>Stop doing the<br />same work twice.<br /><span className="gradient-text">Start with Orosu.</span></h2><p>Build your profile once. Tailor every application from there.</p><ArrowButton href="https://orosu-72g3.vercel.app">Build my profile</ArrowButton><small>No credit card required.</small></Reveal></div></section>;
 }
 
 export function Footer() {
