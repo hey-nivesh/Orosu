@@ -9,6 +9,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.17.24",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/uuid": "^10.0.0",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -17,17 +23,9 @@
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
     "puppeteer": "^25.11.0",
+    "tsx": "^4.23.14",
+    "typescript": "^5.8.2",
     "uuid": "^14.0.2",
     "zod": "^3.24.2"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/multer": "^1.4.12",
-    "@types/node": "^20.17.24",
-    "@types/pdf-parse": "^1.1.4",
-    "@types/uuid": "^10.0.0",
-    "tsx": "^4.23.14",
-    "typescript": "^5.8.2"
   }
 }

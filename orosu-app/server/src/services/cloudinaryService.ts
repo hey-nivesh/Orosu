@@ -57,6 +57,6 @@ export async function uploadResumePDF(
       }
     );
 
-    uploadStream.end(pdfBuffer);
+    (uploadStream as any).end(pdfBuffer);
   });
 }

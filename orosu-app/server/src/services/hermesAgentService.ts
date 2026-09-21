@@ -69,7 +69,7 @@ export async function executeHermesOneShot(prompt: string, timeoutMs: number = 2
           maxBuffer: 10 * 1024 * 1024,
           windowsHide: true,
         },
-        (error, stdout, stderr) => {
+        (error: Error | null, stdout: string, stderr: string) => {
           if (error) {
             console.warn("⚠️ Hermes CLI execution notice:", error.message);
             return resolve(null);
