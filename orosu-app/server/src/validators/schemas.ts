@@ -268,6 +268,7 @@ export const TailoredExperienceSchema = z.object({
   startDate: z.string().default(""),
   endDate: z.string().default("Present"),
   bullets: z.array(TailoredBulletSchema).default([]),
+  technologies: z.array(z.string()).optional().default([]),
   relevanceScore: z.number().default(1),
 });
 
@@ -278,6 +279,9 @@ export const TailoredProjectSchema = z.object({
   description: z.string().default(""),
   technologies: z.array(z.string()).default([]),
   url: z.string().default(""),
+  previewUrl: z.string().optional().default(""),
+  startDate: z.string().optional().default(""),
+  endDate: z.string().optional().default(""),
   bullets: z.array(TailoredBulletSchema).default([]),
 });
 
@@ -300,6 +304,7 @@ export const TailoredResumeJSONSchema = z.object({
   templateId: z.string().default("modern_clean"),
   basics: BasicsSchema,
   summary: z.string(),
+  relevantToRole: z.array(z.string()).optional().default([]),
   skills: z.array(TailoredSkillSchema).default([]),
   experiences: z.array(TailoredExperienceSchema).default([]),
   projects: z.array(TailoredProjectSchema).default([]),
@@ -318,7 +323,7 @@ export const TailoredResumeJSONSchema = z.object({
       rejectedStatementsCount: 0,
       evidenceCoveragePercent: 100,
     }),
-});
+}).passthrough();
 
 export type TailoredResumeJSON = z.infer<typeof TailoredResumeJSONSchema>;
 

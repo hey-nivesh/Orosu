@@ -180,6 +180,21 @@ export const tailorApi = {
       method: "DELETE",
     }),
 
+  saveEdits: (id: string, tailored_resume_json: any) =>
+    request<any>(`/api/resumes/versions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tailored_resume_json }),
+    }),
+
+  tailorWithJD: (id: string, jdText: string) =>
+    request<{ tailoredResumeJson: any; matchRadar: any; evidenceMap: any[]; correlationId: string }>(
+      `/api/resumes/versions/${id}/tailor-with-jd`,
+      {
+        method: "POST",
+        body: JSON.stringify({ jdText }),
+      }
+    ),
+
   downloadPdf: async (versionId: string, customFilename?: string) => {
     const headers = await getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/api/resumes/versions/${versionId}/download`, {

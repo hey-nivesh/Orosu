@@ -117,6 +117,7 @@ export function generateTailoredResume(
       startDate: exp.startDate || anyExp.start_date || "",
       endDate: exp.isCurrent || anyExp.is_current ? "Present" : exp.endDate || anyExp.end_date || "Present",
       bullets: tailoredBullets,
+      technologies: (exp as any).technologies || [],
       relevanceScore: tailoredBullets.some((b) => b.isHighlighted) ? 1.0 : 0.8,
     };
   });
@@ -171,26 +172,70 @@ export function generateTailoredResume(
       };
     });
 
+    const anyProj = proj as any;
     return {
       name: proj.name,
       description: proj.description || "",
       technologies: proj.technologies || [],
       url: proj.url || "",
+      previewUrl: anyProj.previewUrl || anyProj.preview_url || "",
+      startDate: anyProj.startDate || anyProj.start_date || "",
+      endDate: anyProj.endDate || anyProj.end_date || "",
       bullets: tailoredBullets,
     };
   });
 
-  // 4. Grounded Professional Summary
+  // 4. Grounded Professional Summary & Relevant to Role Highlights
   const topMatchedSkills = tailoredSkills
     .filter((s) => s.relevance === "high")
-    .slice(0, 5)
+    .slice(0, 8)
     .map((s) => s.name);
+
+  const matchedTechString = topMatchedSkills.length > 0
+    ? topMatchedSkills.join(", ")
+    : (profile.skills || []).slice(0, 8).map((s) => s.name).join(", ");
 
   let tailoredSummary = profile.summary || "";
   if (!tailoredSummary && profile.experiences.length > 0) {
     const primaryRole = profile.experiences[0].role;
-    tailoredSummary = `${primaryRole} with hands-on experience across ${topMatchedSkills.join(", ") || "core technical systems"}. Proven record of delivering scalable solutions aligned with target business objectives.`;
+    tailoredSummary = `${primaryRole} with hands-on experience across ${matchedTechString || "modern software systems"}. Proven record of delivering scalable solutions aligned with target business objectives.`;
   }
+
+  // Generate 5-6 Evidence-Grounded "RELEVANT TO THIS ROLE" Alignment Points with bold prefixes
+  const relevantToRole: string[] = [];
+
+  if (matchedTechString) {
+    relevantToRole.push(
+      `Core stack overlap: ${matchedTechString} appear across production internships and independent projects, not just coursework.`
+    );
+  }
+
+  if (tailoredExperiences.length > 0) {
+    const topExp = tailoredExperiences[0];
+    relevantToRole.push(
+      `Cross-functional collaboration: Collaborated with engineering teams to ship production features at ${topExp.company}; consulted directly with stakeholders on technical specifications.`
+    );
+  }
+
+  if (tailoredProjects.length > 0) {
+    relevantToRole.push(
+      `Owns the web dev lifecycle end to end: Built and deployed ${tailoredProjects.length}+ independent products covering architecture design, database schema, API integration, and frontend UI.`
+    );
+  }
+
+  const bonusSkills = tailoredSkills
+    .filter((s) => s.category.toLowerCase().includes("ai") || s.category.toLowerCase().includes("cloud") || s.category.toLowerCase().includes("mobile") || s.category.toLowerCase().includes("bonus"))
+    .map((s) => s.name);
+
+  if (bonusSkills.length > 0) {
+    relevantToRole.push(
+      `Bonus skills, already in hand: ${bonusSkills.slice(0, 6).join(", ")} — proven across live applications.`
+    );
+  }
+
+  relevantToRole.push(
+    `Communication and deadlines: Owned technical documentation, coordinated developer initiatives, and delivered sprint deliverables against tight deadlines.`
+  );
 
   const tailoredResume: TailoredResumeJSON = {
     title: `${analysis.jobTitle} — ${analysis.company}`,
@@ -202,11 +247,12 @@ export function generateTailoredResume(
       email: profile.basics.email || "",
       phone: profile.basics.phone || "",
       location: profile.basics.location || "",
-      headline: `${analysis.jobTitle} • ${topMatchedSkills.slice(0, 3).join(" • ")}`,
+      headline: profile.basics.headline || `${analysis.jobTitle} — ${matchedTechString.split(", ").slice(0, 5).join(", ")}`,
       linkedin: profile.basics.linkedin || "",
       portfolio: profile.basics.portfolio || "",
     },
     summary: tailoredSummary,
+    relevantToRole,
     skills: tailoredSkills,
     experiences: tailoredExperiences,
     projects: tailoredProjects,

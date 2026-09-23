@@ -233,6 +233,7 @@ export interface TailoredExperience {
   startDate?: string;
   endDate?: string;
   bullets: TailoredBullet[];
+  technologies?: string[];
   relevanceScore?: number;
 }
 
@@ -241,6 +242,9 @@ export interface TailoredProject {
   description?: string;
   technologies: string[];
   url?: string;
+  previewUrl?: string;
+  startDate?: string;
+  endDate?: string;
   bullets: TailoredBullet[];
 }
 
@@ -267,6 +271,7 @@ export interface TailoredResumeJSON {
     portfolio: string;
   };
   summary: string;
+  relevantToRole?: string[];
   skills: TailoredSkill[];
   experiences: TailoredExperience[];
   projects: TailoredProject[];

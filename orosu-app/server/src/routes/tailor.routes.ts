@@ -325,4 +325,223 @@ router.post("/tailor/generate", requireAuth, async (req: AuthenticatedRequest, r
   }
 });
 
+/**
+ * GET /api/resumes/versions
+ * Lists all tailored resume versions for the authenticated user
+ */
+router.get("/resumes/versions", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const client = req.supabaseClient!;
+
+    const { data, error } = await client
+      .from("resume_versions")
+      .select("id, version_number, title, target_role, target_company, status, pdf_url, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return res.json({ success: true, data: data || [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: { code: "FETCH_VERSIONS_ERROR", message: err.message } });
+  }
+});
+
+/**
+ * GET /api/resumes/versions/:id
+ * Retrieves a single tailored resume version
+ */
+router.get("/resumes/versions/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const client = req.supabaseClient!;
+    const versionId = req.params.id;
+
+    const { data, error } = await client
+      .from("resume_versions")
+      .select("*")
+      .eq("id", versionId)
+      .eq("user_id", userId)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Resume version not found." } });
+    }
+
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: { code: "FETCH_VERSION_ERROR", message: err.message } });
+  }
+});
+
+/**
+ * PATCH /api/resumes/versions/:id
+ * Saves manual edits to the tailored_resume_json of a resume version
+ */
+router.patch("/resumes/versions/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const client = req.supabaseClient!;
+    const versionId = req.params.id;
+    const { tailored_resume_json } = req.body;
+
+    if (!tailored_resume_json || typeof tailored_resume_json !== "object") {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_BODY", message: "tailored_resume_json object is required." },
+      });
+    }
+
+    const { data, error } = await client
+      .from("resume_versions")
+      .update({ tailored_resume_json, updated_at: new Date().toISOString() })
+      .eq("id", versionId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Resume version not found." } });
+    }
+
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: { code: "SAVE_EDITS_ERROR", message: err.message } });
+  }
+});
+
+/**
+ * DELETE /api/resumes/versions/:id
+ * Deletes a resume version record
+ */
+router.delete("/resumes/versions/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const client = req.supabaseClient!;
+    const versionId = req.params.id;
+
+    const { error } = await client
+      .from("resume_versions")
+      .delete()
+      .eq("id", versionId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    return res.json({ success: true, message: "Resume version deleted." });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: { code: "DELETE_VERSION_ERROR", message: err.message } });
+  }
+});
+
+/**
+ * POST /api/resumes/versions/:id/tailor-with-jd
+ * Re-tailors an existing resume version using new raw JD text via Groq AI.
+ * Updates the version's tailored_resume_json in place and returns the new JSON.
+ */
+router.post("/resumes/versions/:id/tailor-with-jd", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const correlationId = uuidv4();
+  console.info(`[${correlationId}] Starting JD-based re-tailoring for version ${req.params.id}`);
+
+  try {
+    const userId = req.user!.id;
+    const client = req.supabaseClient!;
+    const versionId = req.params.id;
+    const { jdText } = req.body;
+
+    if (!jdText || typeof jdText !== "string" || jdText.trim().length < 50) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_JD", message: "jdText must be a non-empty job description (at least 50 characters)." },
+      });
+    }
+
+    // 1. Fetch the existing version to get the career profile id
+    const { data: existingVersion, error: verErr } = await client
+      .from("resume_versions")
+      .select("*")
+      .eq("id", versionId)
+      .eq("user_id", userId)
+      .single();
+
+    if (verErr || !existingVersion) {
+      return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Resume version not found." } });
+    }
+
+    // 2. Fetch Master Career Profile
+    const { data: careerProfile, error: profileErr } = await client
+      .from("career_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (profileErr || !careerProfile) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "PROFILE_REQUIRED", message: "Career profile not found. Please complete your Master Career Profile." },
+      });
+    }
+
+    const profileData: StructuredCareerProfile = careerProfile.profile_json;
+
+    // 3. Analyze the provided JD text
+    console.info(`[${correlationId}] Analyzing provided JD text`);
+    const analysis = await runHermesJDAnalysis(jdText.trim(), existingVersion.target_company || undefined, existingVersion.target_role || undefined);
+
+    // 4. Evidence Matching
+    console.info(`[${correlationId}] Matching candidate evidence`);
+    const { evidenceMap, matchRadar } = await runHermesCandidateMatching(profileData, analysis);
+
+    // 5. Generate Tailored Resume
+    console.info(`[${correlationId}] Generating tailored resume content`);
+    const templateId = existingVersion.template_id || "modern_clean";
+    const tailoredResume = await runHermesResumeTailoring(profileData, analysis, evidenceMap, templateId);
+
+    // 6. Validate
+    const validation = await runHermesResumeValidation(tailoredResume, profileData);
+    if (!validation.isValid) {
+      console.warn(`[${correlationId}] Validation: ${validation.rejectedCount} statements replaced`);
+    }
+
+    // 7. Save updated JSON to Supabase (update in place, keep existing PDF)
+    const { data: updatedVersion, error: updateErr } = await client
+      .from("resume_versions")
+      .update({
+        tailored_resume_json: tailoredResume,
+        target_role: analysis.jobTitle || existingVersion.target_role,
+        target_company: analysis.company || existingVersion.target_company,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", versionId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    console.info(`[${correlationId}] Re-tailoring complete for version ${versionId}`);
+
+    return res.json({
+      success: true,
+      data: {
+        tailoredResumeJson: tailoredResume,
+        matchRadar,
+        evidenceMap,
+        correlationId,
+      },
+    });
+  } catch (err: any) {
+    console.error(`[${correlationId}] Re-tailoring failure:`, err);
+    return res.status(500).json({
+      success: false,
+      error: { code: "RETAILOR_FAILED", message: err.message || "Failed to re-tailor resume with provided JD." },
+    });
+  }
+});
+
 export default router;
+
